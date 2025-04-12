@@ -1,0 +1,125 @@
+
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel Admin TOONSTORE</title>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.230/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <h1>TOONSTORE Admin</h1>
+  <button onclick="baixarTodasVendas()">Exportar Todas as Vendas</button>
+  <div id="notificacaoTopo" style="background:#ffe082;padding:10px;margin-bottom:20px;display:none"></div>
+  <div id="produtos" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:20px"></div>
+  <h2>Gráfico de Vendas</h2>
+  <canvas id="graficoVendas" width="400" height="200"></canvas>
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyCoyfaZEsSIuNuFR1VqLEhTMDQwcQzpc54",
+      authDomain: "loja-online-a2bf6.firebaseapp.com",
+      databaseURL: "https://loja-online-a2bf6-default-rtdb.firebaseio.com",
+      projectId: "loja-online-a2bf6",
+      storageBucket: "loja-online-a2bf6.appspot.com",
+      messagingSenderId: "1031821722384",
+      appId: "1:1031821722384:web:ce2c8ae4e1c8a7cc4d1b95"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    db.ref('produtos').on('value', snapshot => {
+      const container = document.getElementById('produtos');
+      container.innerHTML = '';
+      const dados = snapshot.val();
+      const produtos = Object.entries(dados || {});
+      produtos.forEach(([i, produto]) => {
+        const div = document.createElement('div');
+        div.className = 'produto';
+        div.innerHTML = `
+          <strong>${produto.nome}</strong><br>
+          Preço Base: <input type="number" value="${produto.precoBase}" data-i="${i}" data-campo="precoBase"><br>
+          Categoria: <input type="text" value="${produto.categoria || ''}" data-i="${i}" data-campo="categoria"><br>
+          Nº Vendas: <input type="number" value="${produto.vendas}" data-i="${i}" data-campo="vendas">
+          ${produto.externo ? `<br>URL: <input type="text" value="${produto.url}" data-i="${i}" data-campo="url">` : ''}<br>
+        `;
+        container.appendChild(div);
+      });
+    });
+
+    function baixarTodasVendas() {
+      db.ref('produtos').once('value').then(snapshot => {
+        const produtos = Object.values(snapshot.val() || {});
+        let csvContent = 'Produto,Categoria,Vendas,Preço Base\n';
+        produtos.forEach(p => {
+          csvContent += `${p.nome},${p.categoria || ''},${p.vendas || 0},${p.precoBase || 0}\n`;
+        });
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', 'relatorio_vendas_todas.csv');
+        link.click();
+      });
+    }
+
+    db.ref('compras').on('child_added', snapshot => {
+      const compra = snapshot.val();
+      const mensagem = `Nova compra: €${compra.total?.toFixed(2) || 0}`;
+      const el = document.getElementById('notificacaoTopo');
+      el.innerText = mensagem;
+      el.style.display = 'block';
+
+      const emailPayload = {
+        service_id: 'service_toon8',
+        template_id: 'template_TOON8',
+        user_id: 'fESMPBo9rda_x-O6p',
+        template_params: {
+          to_email: 'everton.rodriguestbg@gmail.com',
+          subject: 'Nova Compra Recebida',
+          message: mensagem
+        }
+      };
+
+      fetch('https://api.emailjs.com/api/v1.0/email/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(emailPayload)
+      });
+    });
+
+    db.ref('produtos').on('value', snapshot => {
+      const dados = snapshot.val();
+      const produtos = Object.values(dados || {});
+      const labels = produtos.map(p => p.nome);
+      const vendas = produtos.map(p => p.vendas || 0);
+      const ctx = document.getElementById('graficoVendas').getContext('2d');
+      new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Nº de Vendas',
+            data: vendas,
+            backgroundColor: 'rgba(75, 192, 192, 0.6)'
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: true },
+            title: {
+              display: true,
+              text: 'Produtos Mais Vendidos'
+            }
+          }
+        }
+      });
+    });
+  </script>
+</body>
+</html>
